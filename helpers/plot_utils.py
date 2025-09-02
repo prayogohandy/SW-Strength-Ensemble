@@ -1,0 +1,180 @@
+import matplotlib.pyplot as plt
+
+def draw_dimension(
+    ax, p1, p2, offset=(0, 0), text=None, rotation='horizontal',
+    color="black", lw=1, text_offset=10, arrowstyle="<|-|>"
+):
+    """
+    Draws a dimension line with extension lines and label.
+    The label is placed above the line with a customizable offset.
+
+    ax         : matplotlib axis
+    p1, p2     : tuples (x,y) → endpoints on the object
+    offset     : (dx, dy) → shift of dimension line away from object
+    text       : label (if None, distance is shown)
+    rotation   : text rotation ('horizontal' or 'vertical')
+    color      : line/text color
+    lw         : line width
+    text_offset: shift of the label from the line (in data units)
+    arrowstyle : matplotlib arrow style string
+    """
+    import numpy as np
+
+    # Compute offset points (dimension line endpoints)
+    p1_off = (p1[0] + offset[0], p1[1] + offset[1])
+    p2_off = (p2[0] + offset[0], p2[1] + offset[1])
+
+    # Draw extension lines from object to dimension line
+    for pt, pt_off in zip([p1, p2], [p1_off, p2_off]):
+        ax.plot([pt[0], pt_off[0]], [pt[1], pt_off[1]], color=color, lw=lw, linestyle='dotted', alpha=0.7)
+
+    # Default label = numeric distance
+    if text is None:
+        dist = np.hypot(p2[0] - p1[0], p2[1] - p1[1])
+        text = f"{dist:.2f}"
+        
+    # Handle custom outside arrows
+    if arrowstyle == "|>-<|":
+        # Default text = distance
+        if rotation == 'horizontal':
+            # Left arrow (pointing right)
+            ax.annotate(
+                "", xy=p1_off, xytext=(p1_off[0]-0.001, p1_off[1]),
+                arrowprops=dict(arrowstyle="-|>", color=color, lw=lw)
+            )
+            # Right arrow (pointing left)
+            ax.annotate(
+                "", xy=p2_off, xytext=(p2_off[0]+0.001, p2_off[1]),
+                arrowprops=dict(arrowstyle="-|>", color=color, lw=lw)
+            )
+            # Main dimension line
+            ax.plot([p1_off[0], p2_off[0]], [p1_off[1], p2_off[1]], color=color, lw=lw)
+            # Text above
+            ax.text((p1_off[0]+p2_off[0])/2, p1_off[1]+text_offset, text,
+                    ha='center', va='bottom', color=color, fontsize=10)
+
+        else:  # vertical
+            # Bottom arrow (pointing up)
+            ax.annotate(
+                "", xy=p1_off, xytext=(p1_off[0], p1_off[1]-0.001),
+                arrowprops=dict(arrowstyle="-|>", color=color, lw=lw)
+            )
+            # Top arrow (pointing down)
+            ax.annotate(
+                "", xy=p2_off, xytext=(p2_off[0], p2_off[1]+0.001),
+                arrowprops=dict(arrowstyle="-|>", color=color, lw=lw)
+            )
+            # Main vertical line
+            ax.plot([p1_off[0], p2_off[0]], [p1_off[1], p2_off[1]], color=color, lw=lw)
+            # Text left
+            ax.text(p1_off[0]-text_offset, (p1_off[1]+p2_off[1])/2, text,
+                    ha='right', va='center', color=color, fontsize=10)
+    else:
+        ax.annotate(
+            "", xy=p1_off, xytext=p2_off,
+            arrowprops=dict(arrowstyle=arrowstyle, lw=lw, color=color, shrinkA=0, shrinkB=0)
+        )
+
+        # Determine text position
+        mid_x = (p1_off[0] + p2_off[0]) / 2
+        mid_y = (p1_off[1] + p2_off[1]) / 2
+        if rotation == 'horizontal':
+            text_x = mid_x
+            text_y = mid_y + text_offset
+            va, ha = "bottom", "center"
+            rot = 0
+        elif rotation == 'vertical':
+            text_x = mid_x - text_offset
+            text_y = mid_y
+            ha, va = "right", "center"
+            rot = 90
+        else:
+            # Allow arbitrary angle
+            angle = np.degrees(np.arctan2(p2_off[1] - p1_off[1], p2_off[0] - p1_off[0]))
+            text_x = mid_x
+            text_y = mid_y + text_offset
+            ha, va = "center", "center"
+            rot = angle
+
+        # Place the label
+        ax.text(text_x, text_y, text, ha=ha, va=va, rotation=rot, color=color, fontsize=10, clip_on=True)
+        
+def draw_cross_section(Lw, tw, tf, bf, arrow_offset):
+    fig, ax = plt.subplots(figsize=(6,4), dpi=200)
+    
+    # Define flange polygon
+    flange_x = [0, tf, tf, 0]
+    flange_y = [0, 0, bf, bf]
+    ax.fill(flange_x, flange_y, color='lightblue', alpha=0.7, label='Flange')
+
+    # Web
+    web_x = [tf, Lw-tf, Lw-tf, tf]
+    web_height = (bf - tw)/2
+    web_y = [web_height, web_height, web_height+tw, web_height+tw]
+    ax.fill(web_x, web_y, color='lightgrey', alpha=0.7, label='Web')
+
+    # Define flange polygon
+    offset = Lw-tf
+    flange_x = [offset, offset + tf, offset + tf, offset]
+    flange_y = [0, 0, bf, bf]
+    ax.fill(flange_x, flange_y, color='lightblue', alpha=0.7, label='Flange')
+    
+    # ===== Annotations =====
+    # Lw (horizontal length of wall)
+    draw_dimension(ax, (0, 0), (Lw, 0), offset=(0,-arrow_offset), text="$L_w$", arrowstyle="<|-|>")
+
+    # bf (flange width, vertical)
+    draw_dimension(ax, (0, 0), (0, bf), offset=(-arrow_offset,0), text="$b_f$", rotation='vertical', arrowstyle="<|-|>")
+
+    # tw (web thickness, vertical)
+    draw_dimension(ax, (Lw/2, web_height), (Lw/2, web_height+tw),
+                   offset=(0, 0), text="$t_w$", rotation='vertical', arrowstyle="|>-<|")
+
+    # tf (flange thickness, horizontal)
+    draw_dimension(ax, (0, bf), (tf, bf), offset=(0,arrow_offset), text="$t_f$", arrowstyle="<|-|>")
+
+    # ===== Plot settings =====
+    ax.set_aspect('equal')
+    ax.axis('off')
+    pad_x, pad_y = 3 * arrow_offset, 3 * arrow_offset
+    ax.set_xlim(-pad_x, Lw + pad_x)
+    ax.set_ylim(-pad_y, max(bf, tw) + pad_y)
+    return fig
+
+def draw_elevation(Hw, Lw, tf, arrow_offset):
+    fig, ax = plt.subplots(figsize=(6,4), dpi=200)
+    
+    # Define flange polygon
+    flange_x = [0, tf, tf, 0]
+    flange_y = [0, 0, Hw, Hw]
+    ax.fill(flange_x, flange_y, color='lightblue', alpha=0.7, label='Flange')
+
+    # Web
+    web_x = [tf, Lw-tf, Lw-tf, tf]
+    web_y = [0, 0, Hw, Hw]
+    ax.fill(web_x, web_y, color='lightgrey', alpha=0.7, label='Web')
+
+    # Define flange polygon
+    offset = Lw-tf
+    flange_x = [offset, offset + tf, offset + tf, offset]
+    flange_y = [0, 0, Hw, Hw]
+    ax.fill(flange_x, flange_y, color='lightblue', alpha=0.7, label='Flange')
+    
+    # ===== Annotations =====
+    # Lw (horizontal length of wall)
+    draw_dimension(ax, (0, 0), (Lw, 0), offset=(0,-arrow_offset), text="$L_w$", arrowstyle="<|-|>")
+
+    # Hw (vertical height of wall)
+    draw_dimension(ax, (0, 0), (0, Hw), offset=(-arrow_offset,0), text="$b_f$", rotation='vertical', arrowstyle="<|-|>")
+
+    # tf (flange thickness, horizontal)
+    draw_dimension(ax, (0, Hw), (tf, Hw), offset=(0, arrow_offset), text="$t_f$", arrowstyle="<|-|>")
+
+    # ===== Plot settings =====
+    ax.set_aspect('equal')
+    ax.axis('off')
+    pad_x, pad_y = 3 * arrow_offset, 3 * arrow_offset
+    ax.set_xlim(-pad_x, Lw + pad_x)
+    ax.set_ylim(-pad_y, Hw + pad_y)
+    return fig
+
