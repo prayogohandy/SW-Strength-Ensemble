@@ -129,8 +129,6 @@ with tabs[1]:
         predictions = st.session_state.model.predict(X_scenario.values)
         
         st.markdown(f"### Scenario Analysis: ${feature_to_vary}$")
-        st.write(vary_values.shape)
-        st.write(predictions.shape)
         fig = px.line(x=vary_values, y=predictions)
         fig.update_layout(xaxis_title=f"{feature_to_vary} [mm]", yaxis_title="Predicted Shear Strength (kN)")
         st.plotly_chart(fig, use_container_width=True)
