@@ -11,7 +11,7 @@ from helpers.input_utils import make_synced_input
 from helpers.model_utils import load_model
 
 # ------------------ App Title ------------------
-st.title("Stacking Model Demo")
+st.title("Shear Wall Shear Strength Prediction")
 
 raw_features = list(feature_bounds.keys())
 input_data = {}
