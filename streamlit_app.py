@@ -25,12 +25,12 @@ if "history" not in st.session_state:
     st.session_state.history = pd.DataFrame(columns=raw_features + ['Prediction'])
 
 # ------------------ Tabs ------------------
-tabs = st.tabs(["Shear Strength Prediction", "Ensemble Structure", "Scenario Analysis", "History"])
+tabs = st.tabs(["Shear Wall Inputs", "Ensemble Explorer", "Scenario Analysis", "History"])
 
 # ------------------ Inputs & Prediction ------------------
 with tabs[0]:
     fig_container = st.container()
-
+    st.header("Inputs")
     st.subheader("Main Geometry")
     num_col = 2
     columns = st.columns(num_col)
@@ -58,8 +58,8 @@ with tabs[0]:
     df = pd.DataFrame([input_data])
 
     # ------------------ Visualization ------------------
-    st.subheader("Visualization")
     with fig_container:
+        st.subheader("Shear Wall Visualization")
         col1, col2 = st.columns(2)
         fig = draw_cross_section(input_data['Lw'], input_data['tw'], input_data['tf'], 
                                  input_data['bf'], arrow_offset=100)
@@ -81,42 +81,49 @@ with tabs[0]:
     X_input = df_display.values
 
     # ------------------ Prediction ------------------
-    st.subheader("Prediction")
+    # Initialize session state
     if 'model_loaded' not in st.session_state:
         st.session_state.model_loaded = False
         st.session_state.model = None
         st.session_state.current_model_info = None
 
-    variant = st.radio("Choose model variant", options=list(variant_options.keys()),
-                       format_func=lambda x: variant_options[x])
-    model_num = st.selectbox("Select number of base models", options=model_num_options[variant])
+    # ------------------ Sidebar Controls ------------------
+    st.sidebar.header("Model Selection")
 
-    col1, col2 = st.columns(2)
+    # Variant and model number selection
+    variant = st.sidebar.radio(
+        "Choose model variant",
+        options=list(variant_options.keys()),
+        format_func=lambda x: variant_options[x]
+    )
+    model_num = st.sidebar.selectbox(
+        "Number of base models",
+        options=model_num_options[variant]
+    )
+
+    # Load model button
+    col1, col2 = st.sidebar.columns(2)
     load_disabled = st.session_state.current_model_info == f"{model_num}-{variant}"
-    # --- Load Model Button ---
-    if col1.button("Load Model", disabled=load_disabled):
-        if load_disabled:
-            st.info(f"Model {st.session_state.current_model_info} is already loaded")
-        else:
-            start_time = time.time()  # start timer
+    load_label = "Load Model" if not load_disabled else "Model Loaded"
+    if col1.button(load_label, disabled=load_disabled):
+        if not load_disabled:
+            start_time = time.time()
             with st.spinner("Loading..."):
                 model = load_model(model_num, variant)
-            elapsed = time.time() - start_time  # elapsed time
-            st.success(f"Model loaded successfully in {elapsed:.2f} seconds")
+            elapsed = time.time() - start_time
+            st.sidebar.success(f"Model loaded successfully in {elapsed:.2f} seconds")
             st.session_state.model_loaded = True
             st.session_state.current_model_info = f"{model_num}-{variant}"
-            st.session_state.model = model  # store model in session_state
-    if load_disabled:
-        col1.info(f"Current configuration is already loaded")
+            st.session_state.model = model
 
-    # --- Predict Button ---
+    # Predict button
     predict_disabled = not st.session_state.get("model_loaded", False)
     if col2.button("Predict", disabled=predict_disabled):
         start_time = time.time()
         with st.spinner("Predicting..."):
             prediction = st.session_state.model.predict(X_input)[0]
         elapsed = time.time() - start_time
-        st.markdown(f"**Prediction:** {prediction:.2f} kN  \n**Time:** {elapsed:.2f} seconds", unsafe_allow_html=False)
+        st.sidebar.markdown(f"**Prediction:** {prediction:.2f} kN  \n**Time:** {elapsed:.2f} seconds")
 
         # Update prediction history
         new_row = input_data.copy()
@@ -128,26 +135,24 @@ with tabs[0]:
 
 # ------------------ Ensemble Structure ------------------
 with tabs[1]:
-    st.header("Ensemble Model Explorer")
     if not st.session_state.get("model_loaded", False):
         st.warning("Load a model in the Prediction tab first.")
     else:
-        view_mode = st.radio("View Mode", ["Ensemble Structure", 
-                                        "Individual Model Details", "Model Types", "Model Importance"])
-
+        view_mode = st.selectbox(
+            "Select View Mode",
+            ["Ensemble Structure", "Individual Model Details", "Model Types", "Model Importance"],
+        )
+        st.markdown("---")
         model = st.session_state.model
         num_levels = len(model.all_models)
 
         if view_mode == "Ensemble Structure":
-            st.subheader("Ensemble Structure")
             max_model_number = len(model.all_models[-1])
             max_models = st.slider("Max models shown:", 2, min(50, max_model_number), min(5, max_model_number))
             html_content = visualize_last_layer_ensemble(ensembler=model.ensembler, node_size=15, max_models=max_models)
             st.components.v1.html(html_content, height=600)
 
         elif view_mode == "Individual Model Details":
-            st.subheader("Model Details")
-
             # Level selection
             level_idx = 0 # st.selectbox("Select Level", range(num_levels), key="indiv_level")
             models_at_level = model.all_models[level_idx]
@@ -189,19 +194,16 @@ with tabs[1]:
 
 
         elif view_mode == "Model Types":
-            st.subheader("Model Types Distribution")
             level_idx = 0 # st.selectbox("Select Level", range(num_levels), key="types_level")
             model_types = [
                 model_abbreviations.get(m.base_model.__class__.__name__, m.base_model.__class__.__name__)
                 for m in model.all_models[level_idx]
             ]
             type_counts = pd.Series(model_types).value_counts()
-            fig = px.pie(values=type_counts.values, names=type_counts.index, 
-                        title=f"Model Types")
+            fig = px.pie(values=type_counts.values, names=type_counts.index)
             st.plotly_chart(fig, use_container_width=True)
 
         elif view_mode == "Model Importance":
-            st.subheader("Model Importance")
             final_models = model.all_models[-1]
             names = get_model_names(final_models)
 
@@ -214,11 +216,11 @@ with tabs[1]:
 
 # ------------------ Scenario Analysis ------------------
 with tabs[2]:
-    st.header("Scenario Analysis")
     if not st.session_state.get("model_loaded", False):
         st.warning("Load a model in the Prediction tab first.")
     else:
         feature_to_vary = st.selectbox("Select feature to vary", options=raw_features)
+        st.markdown("---")
         lb, ub = feature_bounds[feature_to_vary]
         vary_range = st.slider(f"Set range for {rename_dict[feature_to_vary]}", 
                                min_value=lb, max_value=ub, value=(lb, ub))
@@ -235,7 +237,6 @@ with tabs[2]:
                                                if col in scenario_df.columns])
         predictions = st.session_state.model.predict(X_scenario.values)
         
-        st.markdown(f"### Scenario Analysis: ${feature_to_vary}$")
         fig = px.line(x=vary_values, y=predictions)
         fig.update_layout(xaxis_title=f"{feature_to_vary} [mm]", 
                           yaxis_title="Predicted Shear Strength (kN)")
@@ -243,17 +244,17 @@ with tabs[2]:
 
 # ------------------ Prediction History ------------------
 with tabs[3]:
-    st.header("Prediction History")
     history = st.session_state.history
-    if st.button("Clear Prediction History"):
-        st.session_state.history = pd.DataFrame(columns=raw_features + ['Prediction'])
-        history = st.session_state.history
 
     if history.empty:
         st.warning("No prediction history available.")
     else:
-        st.dataframe(history)
+        if st.button("Clear Prediction History"):
+            st.session_state.history = pd.DataFrame(columns=raw_features + ['Prediction'])
+            history = st.session_state.history
 
+        st.dataframe(history)
+        st.markdown("---")
         # Feature vs Prediction
         feature_to_plot = st.selectbox("Select feature to plot", options=raw_features)
         fig_feature = px.scatter(history, x=feature_to_plot, y="Prediction", 
@@ -262,7 +263,8 @@ with tabs[3]:
                                          "Prediction": "Shear Strength (kN)"},
                                  title=f"{feature_to_plot} vs Predicted Shear Strength")
         st.plotly_chart(fig_feature, use_container_width=True)
-
+        
+        st.markdown("---")
         # Historical Shear Strength Plot
         fig3 = px.scatter(history, x=history.index, y="Prediction", hover_data=history.columns,
                           labels={"x": "Prediction Index", "Prediction": "Shear Strength (kN)"},
