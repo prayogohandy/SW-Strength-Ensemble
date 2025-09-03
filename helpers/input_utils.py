@@ -39,6 +39,7 @@ def make_synced_input(f, lb, ub, step, col, rename_dict, default_values, scale=1
                       value=value_disp, step=step_disp, key=f"{f}_slider",
                       on_change=update_from_slider)
 
-    input_col.text_input("", value=fmt % value_disp, key=f"{f}_text", on_change=update_from_text)
+    input_col.text_input(f"{rename_dict[f]}", value=fmt % value_disp, 
+                         key=f"{f}_text", on_change=update_from_text, label_visibility="hidden")
 
     return st.session_state[f]

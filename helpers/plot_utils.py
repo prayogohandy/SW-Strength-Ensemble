@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import numpy as np
 
 def draw_dimension(
     ax, p1, p2, offset=(0, 0), text=None, rotation='horizontal',
@@ -178,3 +179,30 @@ def draw_elevation(Hw, Lw, tf, arrow_offset):
     ax.set_ylim(-pad_y, Hw + pad_y)
     return fig
 
+def plot_prediction(y_train, pred_train, y_test, pred_test):
+    fig = plt.figure(figsize=(6, 6))
+    all_vals = np.concatenate([y_train, pred_train, y_test, pred_test])
+    min_val = np.min(all_vals)
+    max_val = np.max(all_vals)
+    x_vals = np.linspace(min_val, max_val, 100)
+    plt.plot(x_vals, x_vals, 'k--')
+    perc = 0.25
+    color = 'black'
+    upper = x_vals * (1 + perc)
+    lower = x_vals / (1 + perc)
+    plt.plot(x_vals, upper, linestyle='--', color=color, alpha=0.6)
+    plt.plot(x_vals, lower, linestyle='--', color=color, alpha=0.6)
+    plt.text(0.9 / 1.25  * max_val, 0.9 * max_val, f'+{int(perc*100)}%', color=color, ha='right', fontsize=10)
+    plt.text(0.9 * max_val, 0.9 / 1.3 * max_val, f'-{int(perc*100)}%', color=color, ha='left', fontsize=10)
+    plt.scatter(y_train, pred_train, label='Train', alpha=0.6, s=30, edgecolors='blue', marker='o', facecolors='none')
+    plt.scatter(y_test, pred_test, label='Test', alpha=0.6, s=30, edgecolors='red', marker='^', facecolors='none')
+    plt.xlabel('Experiment Shear Strength (kN)')
+    plt.ylabel('Predicted Shear Strength (kN)')
+    plt.grid(False)
+    plt.axis('equal')
+    plt.xlim(min_val, max_val)
+    plt.ylim(min_val, max_val)
+    plt.legend(loc='upper left')
+    plt.tight_layout()
+
+    return fig

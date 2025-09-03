@@ -481,8 +481,7 @@ class StackingRegressor:
         return self.ensembler.score(X, y)
 
     def visualize_tree(self, calculate_shap=True, max_models_per_level=None,
-                       file_name='stacking_model_tree', labels=None,
-                       rankdir='TB', ranksep='0.5', dpi ='300', format='tiff'):
+                       labels=None, rankdir='TB', ranksep='0.5', dpi ='300', format='tiff'):
         if self.ensembler is None:
             raise ValueError("Call `.fit()` first to train the ensemble model.")
         
@@ -625,8 +624,4 @@ class StackingRegressor:
             node_id = f'{last_level_idx}_{i}'
             edge_color = to_grayscale_hex(abs(weight) / max_weight)
             dot.edge(node_id, 'ensemble', label=f'{weight:.2f}', color=edge_color)
-    
-        if file_name:
-            dot.render(file_name, view=True)
-    
         return dot

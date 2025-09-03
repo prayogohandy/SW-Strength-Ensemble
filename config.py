@@ -49,3 +49,37 @@ for filename in os.listdir(model_folder):
             model_num_options.setdefault(variant, []).append(model_num)
 for k in model_num_options:
     model_num_options[k] = sorted(model_num_options[k])
+
+model_abbreviations = {
+        "RandomForestRegressor": "RF",
+        "ExtraTreesRegressor": "ET",
+        "GradientBoostingRegressor": "GB",
+        "DecisionTreeRegressor": "DT",
+        "KNeighborsRegressor": "KNN",
+        "SVR": "SVR",
+        "XGBRegressor": "XGB",
+        "LGBMRegressor": "LGB",
+        "CatBoostRegressor": "CB",
+        "MLPRegressor": "MLP",
+        "AdaBoostRegressor": "ADA",
+        "HistGradientBoostingRegressor": "HGB",
+        "GaussianProcessRegressor": "GPR",
+        "Ridge": "Ridge",
+    }
+
+model_abbreviations_lower = {k.lower(): v for k, v in model_abbreviations.items()}
+
+model_param_keys = {
+    "RandomForestRegressor": ["n_estimators", "max_depth", "min_samples_split", "min_samples_leaf", "max_features", "bootstrap"],
+    "ExtraTreesRegressor": ["n_estimators", "max_depth", "min_samples_split", "min_samples_leaf", "max_features", "bootstrap"],
+    "GradientBoostingRegressor": ["n_estimators", "learning_rate", "max_depth", "min_samples_split", "min_samples_leaf", "max_features", "subsample"],
+    "KNeighborsRegressor": ["n_neighbors", "weights", "p"],
+    "SVR": ["C", "epsilon", "gamma", "kernel", "degree"],  # degree only if kernel="poly"
+    "XGBRegressor": ["n_estimators", "max_depth", "learning_rate", "subsample", "colsample_bytree", "reg_alpha", "reg_lambda", "gamma", "min_child_weight"],
+    "LGBMRegressor": ["n_estimators", "max_depth", "learning_rate", "num_leaves", "min_child_samples", "subsample", "colsample_bytree", "reg_alpha", "reg_lambda", "min_split_gain", "verbose"],
+    "CatBoostRegressor": ["iterations", "depth", "learning_rate", "l2_leaf_reg", "border_count", "random_strength", "bagging_temperature", "verbose", "early_stopping_rounds"],
+    "MLPRegressor": ["n_layers", "hidden_layer_sizes", "activation", "solver", "alpha", "learning_rate_init", "max_iter", "early_stopping"],
+    "AdaBoostRegressor": ["n_estimators", "learning_rate", "loss"],
+    "HistGradientBoostingRegressor": ["max_iter", "max_leaf_nodes", "learning_rate", "max_depth", "min_samples_leaf", "l2_regularization", "early_stopping"],
+    "Ridge": ["alpha", "fit_intercept"],
+}

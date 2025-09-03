@@ -1,6 +1,6 @@
 import os, joblib
 import streamlit as st
-from config import model_folder
+from config import model_folder, model_param_keys, model_abbreviations
 
 def load_model(model_num, variant):
     model_path = os.path.join(model_folder, f"{model_num}_{variant}.pkl")
@@ -14,3 +14,33 @@ def load_model(model_num, variant):
         st.error(f"Model file not found: {model_path}")
         return None
 
+def extract_model_params(model):
+    """
+    Extracts only the tuned hyperparameters from a trained model,
+    detecting the type from model.__class__.__name__.
+    """
+    class_name = model.__class__.__name__
+    
+    param_keys = model_param_keys.get(class_name, [])
+    model_params = model.get_params()
+    
+    extracted = {k: model_params[k] for k in param_keys if k in model_params}
+    return extracted
+
+def get_model_names(models):
+    """
+    Returns a list of abbreviated model names.
+    If duplicates exist, adds an index suffix: e.g., RF_0, RF_1
+    """
+    counts = {}
+    result = []
+
+    for model in models:
+        base_name = model.base_model.__class__.__name__
+        abbrev = model_abbreviations.get(base_name, base_name)
+
+        # Get current count (0 if not seen before)
+        index = counts.get(abbrev, 0)
+        counts[abbrev] = index + 1
+        result.append(f"{abbrev}_{index}")
+    return result

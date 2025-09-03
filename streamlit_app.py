@@ -4,11 +4,14 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 
-from config import feature_bounds, default_values, feature_steps, rename_dict, variant_options, model_num_options
+from config import (feature_bounds, default_values, 
+                    feature_steps, rename_dict, variant_options, 
+                    model_num_options, model_abbreviations,
+                    model_abbreviations_lower)
 from helpers.feature_utils import compute_derived_features
-from helpers.plot_utils import draw_cross_section, draw_elevation
+from helpers.plot_utils import draw_cross_section, draw_elevation, plot_prediction
 from helpers.input_utils import make_synced_input
-from helpers.model_utils import load_model
+from helpers.model_utils import load_model, extract_model_params, get_model_names
 
 # ------------------ App Title ------------------
 st.title("Shear Wall Shear Strength Prediction")
@@ -21,7 +24,7 @@ if "history" not in st.session_state:
     st.session_state.history = pd.DataFrame(columns=raw_features + ['Prediction'])
 
 # ------------------ Tabs ------------------
-tabs = st.tabs(["Shear Strength Prediction", "Scenario Analysis", "History"])
+tabs = st.tabs(["Shear Strength Prediction", "Ensemble Structure", "Scenario Analysis", "History"])
 
 # ------------------ Inputs & Prediction ------------------
 with tabs[0]:
@@ -36,7 +39,8 @@ with tabs[0]:
     for i, f in enumerate(main_geometry):
         lb, ub = feature_bounds[f]
         col = columns[i % num_col]
-        input_data[f] = make_synced_input(f, lb, ub, feature_steps[f], col, rename_dict, default_values=default_values)
+        input_data[f] = make_synced_input(f, lb, ub, feature_steps[f], col, rename_dict, 
+                                          default_values=default_values)
 
     # Section Properties Inputs
     st.subheader("Section Properties")
@@ -46,7 +50,8 @@ with tabs[0]:
         lb, ub = feature_bounds[f]
         col = columns[i % num_col]
         scale = 100 if f.startswith('rho') else 1
-        input_data[f] = make_synced_input(f, lb, ub, feature_steps[f], col, rename_dict, scale=scale, default_values=default_values)
+        input_data[f] = make_synced_input(f, lb, ub, feature_steps[f], col, rename_dict, 
+                                          scale=scale, default_values=default_values)
 
     # Convert to DataFrame
     df = pd.DataFrame([input_data])
@@ -55,9 +60,11 @@ with tabs[0]:
     st.subheader("Visualization")
     with fig_container:
         col1, col2 = st.columns(2)
-        fig = draw_cross_section(input_data['Lw'], input_data['tw'], input_data['tf'], input_data['bf'], arrow_offset=100)
+        fig = draw_cross_section(input_data['Lw'], input_data['tw'], input_data['tf'], 
+                                 input_data['bf'], arrow_offset=100)
         col1.pyplot(fig)
-        fig2 = draw_elevation(input_data['Hw'], input_data['Lw'], input_data['tf'], arrow_offset=100)
+        fig2 = draw_elevation(input_data['Hw'], input_data['Lw'], input_data['tf'], 
+                              arrow_offset=100)
         col2.pyplot(fig2)
 
     # ------------------ Derived Features ------------------
@@ -108,16 +115,83 @@ with tabs[0]:
                 ignore_index=True
             )
 
-# ------------------ Scenario Analysis ------------------
+# ------------------ Ensemble Structure ------------------
 with tabs[1]:
+    st.header("Ensemble Model Explorer")
+    if not st.session_state.get("model_loaded", False):
+        st.warning("Load a model in the Prediction tab first.")
+    else:
+        view_mode = st.radio("View Mode", ["Overview", "Ensemble Structure", 
+                                        "Individual Model Details", "Model Types", "Model Importance"])
+
+        model = st.session_state.model
+        num_levels = len(model.all_models)
+
+        if view_mode == "Overview":
+            st.subheader("Model Overview")
+            level_sizes = [len(models) for models in model.all_models]
+            fig = px.bar(x=list(range(num_levels)), y=level_sizes, 
+                        labels={'x':'Level', 'y':'# Models'},
+                        title="Number of Models per Level")
+            st.plotly_chart(fig, use_container_width=True)
+
+        elif view_mode == "Ensemble Structure":
+            st.subheader("Ensemble Structure")
+            max_models = st.slider("Max models per level", 2, 20, 6)
+            dot = model.visualize_tree(max_models_per_level=max_models, calculate_shap=False)
+            st.graphviz_chart(dot.source)
+
+        elif view_mode == "Individual Model Details":
+            st.subheader("Model Details")
+            level_idx = st.selectbox("Select Level", range(num_levels), key="indiv_level")
+            models_at_level = model.all_models[level_idx]
+            model_idx = st.selectbox("Select Model", range(len(models_at_level)), key="indiv_model")
+            individual_model = models_at_level[model_idx]
+
+            model_params = extract_model_params(individual_model.base_model)
+            params_str = "\n".join(f"{k}: {v}" for k, v in model_params.items())
+
+            st.markdown(f"**Model Type:** {individual_model.base_model.__class__.__name__}")
+            st.text_area("Hyperparameters", value=params_str, height=150)
+            st.markdown(f"**Validation RMSE:** {getattr(individual_model, 'oof_score', np.nan):.2f} kN")
+            st.markdown(f"**Test RMSE:** {getattr(individual_model, 'test_score', np.nan):.2f} kN")
+
+        elif view_mode == "Model Types":
+            st.subheader("Model Types Distribution")
+            level_idx = st.selectbox("Select Level", range(num_levels), key="types_level")
+            model_types = [
+                model_abbreviations.get(m.base_model.__class__.__name__, m.base_model.__class__.__name__)
+                for m in model.all_models[level_idx]
+            ]
+            type_counts = pd.Series(model_types).value_counts()
+            fig = px.pie(values=type_counts.values, names=type_counts.index, 
+                        title=f"Model Types at Level {level_idx}")
+            st.plotly_chart(fig, use_container_width=True)
+
+        elif view_mode == "Model Importance":
+            st.subheader("Model Importance")
+            final_models = model.all_models[-1]
+            names = get_model_names(final_models)
+
+            # Aggregate model coefficients or fallback to uniform importance
+            coefs = [abs(model.coef_) for model in model.ensembler.model.models]
+            model_importance = np.mean(coefs, axis=0)
+
+            fig = px.bar(x=names, y=model_importance, labels={"x": "Model", "y": "Weight"})
+            st.plotly_chart(fig, use_container_width=True)
+
+# ------------------ Scenario Analysis ------------------
+with tabs[2]:
     st.header("Scenario Analysis")
     if not st.session_state.get("model_loaded", False):
         st.warning("Load a model in the Prediction tab first.")
     else:
         feature_to_vary = st.selectbox("Select feature to vary", options=raw_features)
         lb, ub = feature_bounds[feature_to_vary]
-        vary_range = st.slider(f"Set range for {rename_dict[feature_to_vary]}", min_value=lb, max_value=ub, value=(lb, ub))
-        n_points = st.slider("Number of points in scenario", min_value=5, max_value=100, value=20, step=5)
+        vary_range = st.slider(f"Set range for {rename_dict[feature_to_vary]}", 
+                               min_value=lb, max_value=ub, value=(lb, ub))
+        n_points = st.slider("Number of points in scenario", min_value=5, max_value=100, 
+                             value=20, step=5)
         vary_values = np.linspace(vary_range[0], vary_range[1], n_points)
 
         scenario_df = pd.DataFrame([input_data]*n_points)
@@ -125,16 +199,18 @@ with tabs[1]:
         scenario_df = compute_derived_features(scenario_df)
 
         cols_to_drop = ['rho_h', 'rho_v', 'rho_b', 'fyh', 'fyv', 'fyb']
-        X_scenario = scenario_df.drop(columns=[col for col in cols_to_drop if col in scenario_df.columns])
+        X_scenario = scenario_df.drop(columns=[col for col in cols_to_drop 
+                                               if col in scenario_df.columns])
         predictions = st.session_state.model.predict(X_scenario.values)
         
         st.markdown(f"### Scenario Analysis: ${feature_to_vary}$")
         fig = px.line(x=vary_values, y=predictions)
-        fig.update_layout(xaxis_title=f"{feature_to_vary} [mm]", yaxis_title="Predicted Shear Strength (kN)")
+        fig.update_layout(xaxis_title=f"{feature_to_vary} [mm]", 
+                          yaxis_title="Predicted Shear Strength (kN)")
         st.plotly_chart(fig, use_container_width=True)
 
 # ------------------ Prediction History ------------------
-with tabs[2]:
+with tabs[3]:
     st.header("Prediction History")
     history = st.session_state.history
     if st.button("Clear Prediction History"):
@@ -148,8 +224,10 @@ with tabs[2]:
 
         # Feature vs Prediction
         feature_to_plot = st.selectbox("Select feature to plot", options=raw_features)
-        fig_feature = px.scatter(history, x=feature_to_plot, y="Prediction", hover_data=history.columns,
-                                 labels={feature_to_plot: feature_to_plot, "Prediction": "Shear Strength (kN)"},
+        fig_feature = px.scatter(history, x=feature_to_plot, y="Prediction", 
+                                 hover_data=history.columns,
+                                 labels={feature_to_plot: feature_to_plot, 
+                                         "Prediction": "Shear Strength (kN)"},
                                  title=f"{feature_to_plot} vs Predicted Shear Strength")
         st.plotly_chart(fig_feature, use_container_width=True)
 
