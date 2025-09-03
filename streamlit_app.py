@@ -1,15 +1,16 @@
 # main.py
+import time
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
+from graphviz import Source
 
 from config import (feature_bounds, default_values, 
                     feature_steps, rename_dict, variant_options, 
-                    model_num_options, model_abbreviations,
-                    model_abbreviations_lower)
+                    model_num_options, model_abbreviations)
 from helpers.feature_utils import compute_derived_features
-from helpers.plot_utils import draw_cross_section, draw_elevation, plot_prediction
+from helpers.plot_utils import draw_cross_section, draw_elevation, visualize_last_layer_ensemble
 from helpers.input_utils import make_synced_input
 from helpers.model_utils import load_model, extract_model_params, get_model_names
 
@@ -91,29 +92,39 @@ with tabs[0]:
     model_num = st.selectbox("Select number of base models", options=model_num_options[variant])
 
     col1, col2 = st.columns(2)
-    load_disabled = st.session_state.current_model_info == (model_num, variant)
-
+    load_disabled = st.session_state.current_model_info == f"{model_num}-{variant}"
+    # --- Load Model Button ---
     if col1.button("Load Model", disabled=load_disabled):
-        with st.spinner("Loading..."):
-            if st.session_state.model_loaded:
-                st.info(f"Model {st.session_state.current_model_info} is already loaded")
-            else:
+        if load_disabled:
+            st.info(f"Model {st.session_state.current_model_info} is already loaded")
+        else:
+            start_time = time.time()  # start timer
+            with st.spinner("Loading..."):
                 model = load_model(model_num, variant)
-                st.success(f"Model loaded successfully")
+            elapsed = time.time() - start_time  # elapsed time
+            st.success(f"Model loaded successfully in {elapsed:.2f} seconds")
+            st.session_state.model_loaded = True
+            st.session_state.current_model_info = f"{model_num}-{variant}"
+            st.session_state.model = model  # store model in session_state
+    if load_disabled:
+        col1.info(f"Current configuration is already loaded")
 
+    # --- Predict Button ---
     predict_disabled = not st.session_state.get("model_loaded", False)
     if col2.button("Predict", disabled=predict_disabled):
+        start_time = time.time()
         with st.spinner("Predicting..."):
             prediction = st.session_state.model.predict(X_input)[0]
-            st.success(f"Prediction: {prediction:.2f} kN")
+        elapsed = time.time() - start_time
+        st.markdown(f"**Prediction:** {prediction:.2f} kN  \n**Time:** {elapsed:.2f} seconds", unsafe_allow_html=False)
 
-            # Update prediction history
-            new_row = input_data.copy()
-            new_row['Prediction'] = prediction
-            st.session_state.history = pd.concat(
-                [st.session_state.history, pd.DataFrame([new_row])],
-                ignore_index=True
-            )
+        # Update prediction history
+        new_row = input_data.copy()
+        new_row['Prediction'] = prediction
+        st.session_state.history = pd.concat(
+            [st.session_state.history, pd.DataFrame([new_row])],
+            ignore_index=True
+        )
 
 # ------------------ Ensemble Structure ------------------
 with tabs[1]:
@@ -121,33 +132,53 @@ with tabs[1]:
     if not st.session_state.get("model_loaded", False):
         st.warning("Load a model in the Prediction tab first.")
     else:
-        view_mode = st.radio("View Mode", ["Overview", "Ensemble Structure", 
+        view_mode = st.radio("View Mode", ["Ensemble Structure", 
                                         "Individual Model Details", "Model Types", "Model Importance"])
 
         model = st.session_state.model
         num_levels = len(model.all_models)
 
-        if view_mode == "Overview":
-            st.subheader("Model Overview")
-            level_sizes = [len(models) for models in model.all_models]
-            fig = px.bar(x=list(range(num_levels)), y=level_sizes, 
-                        labels={'x':'Level', 'y':'# Models'},
-                        title="Number of Models per Level")
-            st.plotly_chart(fig, use_container_width=True)
-
-        elif view_mode == "Ensemble Structure":
+        if view_mode == "Ensemble Structure":
             st.subheader("Ensemble Structure")
-            max_models = st.slider("Max models per level", 2, 20, 6)
-            dot = model.visualize_tree(max_models_per_level=max_models, calculate_shap=False)
-            st.graphviz_chart(dot.source)
+            max_model_number = len(model.all_models[-1])
+            max_models = st.slider("Max models shown:", 2, min(50, max_model_number), min(5, max_model_number))
+            html_content = visualize_last_layer_ensemble(ensembler=model.ensembler, node_size=15, max_models=max_models)
+            st.components.v1.html(html_content, height=600)
 
         elif view_mode == "Individual Model Details":
             st.subheader("Model Details")
-            level_idx = st.selectbox("Select Level", range(num_levels), key="indiv_level")
-            models_at_level = model.all_models[level_idx]
-            model_idx = st.selectbox("Select Model", range(len(models_at_level)), key="indiv_model")
-            individual_model = models_at_level[model_idx]
 
+            # Level selection
+            level_idx = 0 # st.selectbox("Select Level", range(num_levels), key="indiv_level")
+            models_at_level = model.all_models[level_idx]
+
+            # Get model types at this level
+            model_types = [m.base_model.__class__.__name__ for m in models_at_level]
+            unique_types = sorted(list(set(model_types)))
+            type_options = ["All Models"] + unique_types
+
+            # Model type selection
+            col1, col2 = st.columns(2)
+            selected_type = col1.selectbox("Select Model Type", type_options, key="indiv_model_type")
+
+            # Filter models based on type
+            if selected_type == "All Models":
+                filtered_models = models_at_level
+            else:
+                filtered_models = [m for m in models_at_level if m.base_model.__class__.__name__ == selected_type]
+            
+            # Model index selection within filtered models
+            model_idx = col2.slider(
+                "Select Model Index",
+                min_value=0,
+                max_value=len(filtered_models) - 1,
+                value=0,
+                step=1,
+                key="indiv_model_idx"
+            )
+            individual_model = filtered_models[model_idx]
+
+            # Show model details
             model_params = extract_model_params(individual_model.base_model)
             params_str = "\n".join(f"{k}: {v}" for k, v in model_params.items())
 
@@ -156,16 +187,17 @@ with tabs[1]:
             st.markdown(f"**Validation RMSE:** {getattr(individual_model, 'oof_score', np.nan):.2f} kN")
             st.markdown(f"**Test RMSE:** {getattr(individual_model, 'test_score', np.nan):.2f} kN")
 
+
         elif view_mode == "Model Types":
             st.subheader("Model Types Distribution")
-            level_idx = st.selectbox("Select Level", range(num_levels), key="types_level")
+            level_idx = 0 # st.selectbox("Select Level", range(num_levels), key="types_level")
             model_types = [
                 model_abbreviations.get(m.base_model.__class__.__name__, m.base_model.__class__.__name__)
                 for m in model.all_models[level_idx]
             ]
             type_counts = pd.Series(model_types).value_counts()
             fig = px.pie(values=type_counts.values, names=type_counts.index, 
-                        title=f"Model Types at Level {level_idx}")
+                        title=f"Model Types")
             st.plotly_chart(fig, use_container_width=True)
 
         elif view_mode == "Model Importance":
@@ -177,7 +209,7 @@ with tabs[1]:
             coefs = [abs(model.coef_) for model in model.ensembler.model.models]
             model_importance = np.mean(coefs, axis=0)
 
-            fig = px.bar(x=names, y=model_importance, labels={"x": "Model", "y": "Weight"})
+            fig = px.bar(x=names, y=model_importance, labels={"x": "Model", "y": "|Coefficient|"})
             st.plotly_chart(fig, use_container_width=True)
 
 # ------------------ Scenario Analysis ------------------

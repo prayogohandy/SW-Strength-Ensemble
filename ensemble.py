@@ -481,12 +481,12 @@ class StackingRegressor:
         return self.ensembler.score(X, y)
 
     def visualize_tree(self, calculate_shap=True, max_models_per_level=None,
-                       labels=None, rankdir='TB', ranksep='0.5', dpi ='300', format='tiff'):
+                       labels=None, rankdir='TB', ranksep='0.5', dpi ='300', format='png'):
         if self.ensembler is None:
             raise ValueError("Call `.fit()` first to train the ensemble model.")
         
         dot = graphviz.Digraph(format=format, engine='dot')
-        dot.attr(rankdir=rankdir, ranksep=ranksep)
+        dot.attr(rankdir=rankdir, ranksep=ranksep, fontname='Times')
         dot.graph_attr['dpi'] = dpi
         
         # first level only
@@ -551,17 +551,11 @@ class StackingRegressor:
                             label_node = f'label_{i}'
                             dot.edge(label_node, node_id, style='invis')
 
+                # Chain first_part nodes to preserve left-to-right order
+                for i in range(len(first_part) - 1):
+                    dot.edge(f'{level_idx}_{i}', f'{level_idx}_{i+1}', style='invis')
+
                 offset += len(first_part)
-    
-                # Add ellipsis node
-                if is_truncated and max_models_per_level is not None:
-                    hidden_count = num_models - max_models_per_level
-                    ellipsis_id = f'{level_idx}_ellipsis'
-                    s.node(ellipsis_id, f'(+{hidden_count})', shape='plaintext', fontsize='20')
-    
-                    if len(first_part) > 0:
-                        dot.edge(f'{level_idx}_{len(first_part) - 1}', ellipsis_id,
-                                 style='dashed', arrowhead='none')
     
                 # Add second part nodes
                 for i, model in enumerate(tqdm(second_part, desc=f"Level {level_idx} Models", leave=True)):
@@ -596,12 +590,30 @@ class StackingRegressor:
                         if id < len(labels) and id in visible_indices:
                             label_node = f'label_{id}'
                             dot.edge(label_node, node_id, style='invis')
+                
+                # Chain second_part nodes to preserve left-to-right order
+                for i in range(len(second_part) - 1):
+                    dot.edge(f'{level_idx}_{offset + i}', f'{level_idx}_{offset + i + 1}', style='invis')
+
+                # Add ellipsis node
+                if is_truncated and max_models_per_level is not None:
+                    hidden_count = num_models - max_models_per_level
+                    ellipsis_id = f'{level_idx}_ellipsis'
+                    s.node(ellipsis_id, f'(+{hidden_count})', shape='plaintext', fontsize='20')
     
-                # Now add ellipsis -> second part dashed edge
-                if level_idx == 0:
-                    if is_truncated and len(second_part) > 0:
-                        second_node_id = f'{level_idx}_{offset}'
-                        dot.edge(ellipsis_id, second_node_id, style='dashed', arrowhead='none')
+                    # Invisible edges to "center" the ellipsis
+                    if len(first_part) > 0:
+                        dot.edge(f'{level_idx}_{len(first_part) - 1}', ellipsis_id, style='invis')
+                    if len(second_part) > 0:
+                        dot.edge(ellipsis_id, f'{level_idx}_{offset}', style='invis')
+
+                    # Visible dashed edges for clarity
+                    if len(first_part) > 0:
+                        dot.edge(f'{level_idx}_{len(first_part) - 1}', ellipsis_id,
+                                style='dashed', arrowhead='none')
+                    if len(second_part) > 0:
+                        dot.edge(ellipsis_id, f'{level_idx}_{offset}',
+                                style='dashed', arrowhead='none')
     
         # Add final ensemble node
         val_score = self.ensembler.oof_score

@@ -1,5 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from pyvis.network import Network
+import networkx as nx
+from helpers.model_utils import extract_model_params
+from config import model_abbreviations
 
 def draw_dimension(
     ax, p1, p2, offset=(0, 0), text=None, rotation='horizontal',
@@ -166,7 +170,7 @@ def draw_elevation(Hw, Lw, tf, arrow_offset):
     draw_dimension(ax, (0, 0), (Lw, 0), offset=(0,-arrow_offset), text="$L_w$", arrowstyle="<|-|>")
 
     # Hw (vertical height of wall)
-    draw_dimension(ax, (0, 0), (0, Hw), offset=(-arrow_offset,0), text="$b_f$", rotation='vertical', arrowstyle="<|-|>")
+    draw_dimension(ax, (0, 0), (0, Hw), offset=(-arrow_offset,0), text="$H_w$", rotation='vertical', arrowstyle="<|-|>")
 
     # tf (flange thickness, horizontal)
     draw_dimension(ax, (0, Hw), (tf, Hw), offset=(0, arrow_offset), text="$t_f$", arrowstyle="<|-|>")
@@ -206,3 +210,54 @@ def plot_prediction(y_train, pred_train, y_test, pred_test):
     plt.tight_layout()
 
     return fig
+
+def visualize_last_layer_ensemble(ensembler, max_models=None, node_size=15, height=600, width="100%"):
+    """
+    Returns an HTML string for a circular visualization of the last layer and ensemble node.
+    
+    ensembler: fitted ensemble object
+    max_models: int, truncate last layer if too large
+    """
+    G = nx.DiGraph()
+    
+    # Truncate if needed
+    last_models = ensembler.prev_models
+    if max_models and len(last_models) > max_models + 1:
+        half = max_models // 2
+        last_models_display = last_models[:half] + last_models[-(max_models - half):]
+        hidden_count = len(last_models) - len(last_models_display)
+    else:
+        last_models_display = last_models
+        hidden_count = 0
+    
+    # Add last layer nodes
+    for i, model in enumerate(last_models_display):
+        node_id = f"model_{i}"
+        name = model_abbreviations.get(type(model.base_model).__name__)
+        label = f"{name}\nVal: {model.oof_score:.3f}\nTest: {model.test_score:.3f}"
+        G.add_node(node_id, label=label, size=node_size)
+
+        model_params = extract_model_params(model.base_model)
+        params_str = "\n".join(f"{k}: {v}" for k, v in model_params.items())
+        G.nodes[node_id]['title'] = params_str  # hover info
+    
+    # Add ensemble node
+    G.add_node("ensemble", shape="box", size=node_size*1.5, x=0, y=0, 
+               label=f"Ensemble\nVal: {ensembler.oof_score:.3f}\nTest: {ensembler.test_score:.3f}")
+    
+    # Connect last layer nodes to ensemble with weights
+    for i, model in enumerate(last_models_display):
+        node_id = f"model_{i}"
+        weight = ensembler.weights[i]
+        G.add_edge(node_id, "ensemble", label=f"{weight:.2f}")
+    
+    # Ellipsis node if truncated
+    if hidden_count > 0:
+        ellipsis_id = "ellipsis"
+        G.add_node(ellipsis_id, label=f"Hidden MLs\n (+{hidden_count})", size=node_size*1.5, shape="ellipse")
+        G.add_edge(ellipsis_id, "ensemble")
+
+    # Create PyVis network
+    net = Network(height=f"{height}px", width=width, directed=True)
+    net.from_nx(G)
+    return net.generate_html()
