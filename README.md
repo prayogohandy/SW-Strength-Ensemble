@@ -1,6 +1,6 @@
 # Shear Wall Shear Strength Prediction using an Ensemble of ML Models
 
-[![Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://streamlit.io)
+[![Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://sw-strength-ensemble.streamlit.app/)
 
 A **Streamlit web app** to explore and visualize the performance of different stacking ensemble models. Users can interactively analyze model types, compare metrics, and inspect predictions, all without needing to write Python code.
 
