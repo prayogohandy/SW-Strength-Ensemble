@@ -15,6 +15,13 @@ from helpers.input_utils import make_synced_input
 from helpers.model_utils import load_model, extract_model_params, get_model_names
 
 # ------------------ App Title ------------------
+st.set_page_config(
+    page_title="Ensemble Predictor",
+    page_icon="🤖",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
 st.title("Shear Wall Shear Strength Prediction")
 
 raw_features = list(feature_bounds.keys())
