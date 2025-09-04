@@ -237,7 +237,7 @@ def visualize_last_layer_ensemble(ensembler, max_models=None, node_size=15, heig
         label = f"{name}\nVal: {model.oof_score:.3f}\nTest: {model.test_score:.3f}"
         G.add_node(node_id, label=label, size=node_size)
 
-        model_params = extract_model_params(model.base_model)
+        model_params = extract_model_params(model)
         params_str = "\n".join(f"{k}: {v}" for k, v in model_params.items())
         G.nodes[node_id]['title'] = params_str  # hover info
     

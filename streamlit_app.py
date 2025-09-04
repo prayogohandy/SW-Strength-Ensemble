@@ -18,7 +18,6 @@ from helpers.model_utils import load_model, extract_model_params, get_model_name
 st.set_page_config(
     page_title="Ensemble Predictor",
     page_icon="🤖",
-    layout="wide",
     initial_sidebar_state="expanded",
 )
 
@@ -42,32 +41,31 @@ if 'model_loaded' not in st.session_state:
 # ------------------ Tabs ------------------
 tabs = st.tabs(["Shear Wall Inputs", "Ensemble Explorer", "Scenario Analysis", "History"])
 
-# ------------------ Inputs & Prediction ------------------
-with tabs[0]:
-    st.header("Inputs")
-    st.subheader("Main Geometry")
-    num_col = 2
-    columns = st.columns(num_col)
-
+# ------------------ Sidebar Inputs ------------------
+st.sidebar.header("Input Parameters")
+with st.sidebar.expander("Main Geometry", expanded=False):
+    container = st.container()
     # Main Geometry Inputs
     main_geometry = ['Hw', 'Lw', 'tw', 'tf', 'bf']
     for i, f in enumerate(main_geometry):
         lb, ub = feature_bounds[f]
-        col = columns[i % num_col]
-        input_data[f] = make_synced_input(f, lb, ub, feature_steps[f], col, rename_dict, 
+        input_data[f] = make_synced_input(f, lb, ub, feature_steps[f], container, rename_dict, 
                                           default_values=default_values)
-
+        
+with st.sidebar.expander("Section Properties", expanded=False):
     # Section Properties Inputs
-    st.subheader("Section Properties")
-    columns = st.columns(num_col)
+    container = st.container()
     section_properties = ['fyh', 'rho_h', 'fyv', 'rho_v', 'fyb', 'rho_b', "fc'", 'P']
     for i, f in enumerate(section_properties):
         lb, ub = feature_bounds[f]
-        col = columns[i % num_col]
         scale = 100 if f.startswith('rho') else 1
-        input_data[f] = make_synced_input(f, lb, ub, feature_steps[f], col, rename_dict, 
+        input_data[f] = make_synced_input(f, lb, ub, feature_steps[f], container, rename_dict, 
                                           scale=scale, default_values=default_values)
-    st.markdown("---")
+
+st.sidebar.markdown("---")
+
+# ------------------ Inputs & Prediction ------------------
+with tabs[0]:
     # Convert to DataFrame
     df = pd.DataFrame([input_data])
     # ------------------ Derived Features ------------------
@@ -95,18 +93,20 @@ with tabs[0]:
         col2.pyplot(fig2)
 
 
-# ------------------ Sidebar Controls ------------------
-st.sidebar.header("Model Selection")
-# Variant and model number selection
-variant = st.sidebar.radio(
-    "Choose model variant",
-    options=list(variant_options.keys()),
-    format_func=lambda x: variant_options[x]
-)
-model_num = st.sidebar.selectbox(
-    "Number of base models",
-    options=model_num_options[variant]
-)
+# ------------------ Sidebar Model Selection ------------------
+
+st.sidebar.header("Prediction")
+with st.sidebar.expander("Model Selection", expanded=False):
+    # Variant and model number selection
+    variant = st.radio(
+        "Choose model variant",
+        options=list(variant_options.keys()),
+        format_func=lambda x: variant_options[x]
+    )
+    model_num = st.selectbox(
+        "Number of base models",
+        options=model_num_options[variant]
+    )
 
 # Load model button
 col1, col2 = st.sidebar.columns(2)
@@ -191,13 +191,13 @@ with tabs[1]:
             individual_model = filtered_models[model_idx]
 
             # Show model details
-            model_params = extract_model_params(individual_model.base_model)
+            model_params = extract_model_params(individual_model)
             params_str = "\n".join(f"{k}: {v}" for k, v in model_params.items())
 
             st.markdown(f"**Model Type:** {individual_model.base_model.__class__.__name__}")
-            st.text_area("Hyperparameters", value=params_str, height=150)
             st.markdown(f"**Validation RMSE:** {getattr(individual_model, 'oof_score', np.nan):.2f} kN")
             st.markdown(f"**Test RMSE:** {getattr(individual_model, 'test_score', np.nan):.2f} kN")
+            st.text_area("Hyperparameters", value=params_str, height=200)
 
 
         elif view_mode == "Model Types":

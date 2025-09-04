@@ -19,12 +19,28 @@ def extract_model_params(model):
     Extracts only the tuned hyperparameters from a trained model,
     detecting the type from model.__class__.__name__.
     """
-    class_name = model.__class__.__name__
+    class_name = model.base_model.__class__.__name__
     
     param_keys = model_param_keys.get(class_name, [])
-    model_params = model.get_params()
+    model_params = model.base_model.get_params()
     
-    extracted = {k: model_params[k] for k in param_keys if k in model_params}
+    extracted = {}
+    scaler_used = model.scaler # can be None or a scaler object, if a list then should be Custom 
+    if scaler_used is None:
+        extracted['scaler'] = 'none'
+    elif isinstance(scaler_used, dict):
+        extracted['scaler'] = 'custom'
+    else:
+        extracted['scaler'] = scaler_used
+
+    feature_mask = model.feature_mask # if None, all features used
+    if feature_mask is None or sum(feature_mask) == len(feature_mask):
+        extracted['feature_excluded'] = 'none'
+    else:
+        indices = [i for i, x in enumerate(feature_mask) if x == 0]
+        extracted['feature_excluded'] = ','.join(str(i) for i in indices)
+
+    extracted.update({k: model_params[k] for k in param_keys if k in model_params})
     return extracted
 
 def get_model_names(models):

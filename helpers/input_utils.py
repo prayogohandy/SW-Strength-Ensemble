@@ -16,7 +16,8 @@ def make_synced_input(f, lb, ub, step, col, rename_dict, default_values, scale=1
     lb_disp, ub_disp, step_disp = lb * scale, ub * scale, step * scale
     fmt = step_to_format(step_disp)
 
-    slider_col, input_col = col.columns([3,1])
+    with col:
+        slider_col, input_col = st.columns([3,1])
 
     def update_from_slider():
         val = st.session_state[f"{f}_slider"] / scale
