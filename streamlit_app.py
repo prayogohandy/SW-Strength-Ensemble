@@ -31,51 +31,6 @@ if 'model_loaded' not in st.session_state:
     st.session_state.model = None
     st.session_state.current_model_info = None
 
-# ------------------ Sidebar Controls ------------------
-st.sidebar.header("Model Selection")
-# Variant and model number selection
-variant = st.sidebar.radio(
-    "Choose model variant",
-    options=list(variant_options.keys()),
-    format_func=lambda x: variant_options[x]
-)
-model_num = st.sidebar.selectbox(
-    "Number of base models",
-    options=model_num_options[variant]
-)
-
-# Load model button
-col1, col2 = st.sidebar.columns(2)
-load_disabled = st.session_state.current_model_info == f"{model_num}-{variant}"
-load_label = "Load Model" if not load_disabled else "Model Loaded"
-if col1.button(load_label, disabled=load_disabled):
-    if not load_disabled:
-        start_time = time.time()
-        with st.spinner("Loading..."):
-            model = load_model(model_num, variant)
-        elapsed = time.time() - start_time
-        st.sidebar.success(f"Model loaded successfully in {elapsed:.2f} seconds")
-        st.session_state.model_loaded = True
-        st.session_state.current_model_info = f"{model_num}-{variant}"
-        st.session_state.model = model
-
-# Predict button
-predict_disabled = not st.session_state.get("model_loaded", False)
-if col2.button("Predict", disabled=predict_disabled):
-    start_time = time.time()
-    with st.spinner("Predicting..."):
-        prediction = st.session_state.model.predict(X_input)[0]
-    elapsed = time.time() - start_time
-    st.sidebar.markdown(f"**Prediction:** {prediction:.2f} kN  \n**Time:** {elapsed:.2f} seconds")
-
-    # Update prediction history
-    new_row = input_data.copy()
-    new_row['Prediction'] = prediction
-    st.session_state.history = pd.concat(
-        [st.session_state.history, pd.DataFrame([new_row])],
-        ignore_index=True
-    )
-
 
 # ------------------ Tabs ------------------
 tabs = st.tabs(["Shear Wall Inputs", "Ensemble Explorer", "Scenario Analysis", "History"])
@@ -132,6 +87,51 @@ with tabs[0]:
                               arrow_offset=100)
         col2.pyplot(fig2)
 
+
+# ------------------ Sidebar Controls ------------------
+st.sidebar.header("Model Selection")
+# Variant and model number selection
+variant = st.sidebar.radio(
+    "Choose model variant",
+    options=list(variant_options.keys()),
+    format_func=lambda x: variant_options[x]
+)
+model_num = st.sidebar.selectbox(
+    "Number of base models",
+    options=model_num_options[variant]
+)
+
+# Load model button
+col1, col2 = st.sidebar.columns(2)
+load_disabled = st.session_state.current_model_info == f"{model_num}-{variant}"
+load_label = "Load Model" if not load_disabled else "Model Loaded"
+if col1.button(load_label, disabled=load_disabled):
+    if not load_disabled:
+        start_time = time.time()
+        with st.spinner("Loading..."):
+            model = load_model(model_num, variant)
+        elapsed = time.time() - start_time
+        st.sidebar.success(f"Model loaded successfully in {elapsed:.2f} seconds")
+        st.session_state.model_loaded = True
+        st.session_state.current_model_info = f"{model_num}-{variant}"
+        st.session_state.model = model
+
+# Predict button
+predict_disabled = not st.session_state.get("model_loaded", False)
+if col2.button("Predict", disabled=predict_disabled):
+    start_time = time.time()
+    with st.spinner("Predicting..."):
+        prediction = st.session_state.model.predict(X_input)[0]
+    elapsed = time.time() - start_time
+    st.sidebar.markdown(f"**Prediction:** {prediction:.2f} kN  \n**Time:** {elapsed:.2f} seconds")
+
+    # Update prediction history
+    new_row = input_data.copy()
+    new_row['Prediction'] = prediction
+    st.session_state.history = pd.concat(
+        [st.session_state.history, pd.DataFrame([new_row])],
+        ignore_index=True
+    )
 
 # ------------------ Ensemble Structure ------------------
 with tabs[1]:
