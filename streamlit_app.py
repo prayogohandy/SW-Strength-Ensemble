@@ -73,11 +73,11 @@ with tabs[0]:
     df = compute_derived_features(df)
     cols_to_drop = ['rho_h', 'rho_v', 'rho_b', 'fyh', 'fyv', 'fyb']
     df_display = df.drop(columns=[c for c in cols_to_drop if c in df.columns])
-    derived_cols = ['Hw/Lw','Lw/tw','rhofyh','rhofyv','rhofyb','Ab','Ag','Pc','ALR']
+    derived_cols = ['Hw/Lw','Lw/tw','Pc','rhofyh','rhofyv','rhofyb','Ab','Ag','ALR']
     columns = st.columns(3)
     for i, col_name in enumerate(derived_cols):
-        if col_name in ['Ab','Ag']:
-            format_str = "{:d}"
+        if col_name in ['Ab', 'Ag', 'Pc']:
+            format_str = "{:.0f}"
         else:
             format_str = "{:.2f}"
         columns[i % 3].metric(label=rename_dict[col_name], value=format_str.format(df[col_name].values[0]))
