@@ -39,7 +39,7 @@ if 'model_loaded' not in st.session_state:
 
 
 # ------------------ Tabs ------------------
-tabs = st.tabs(["Shear Wall Inputs", "Ensemble Explorer", "Scenario Analysis", "History"])
+tabs = st.tabs(["Shear Wall Details", "Ensemble Explorer", "Scenario Analysis", "History"])
 
 # ------------------ Sidebar Inputs ------------------
 st.sidebar.header("Input Parameters")
@@ -76,7 +76,11 @@ with tabs[0]:
     derived_cols = ['Hw/Lw','Lw/tw','rhofyh','rhofyv','rhofyb','Ab','Ag','Pc','ALR']
     columns = st.columns(3)
     for i, col_name in enumerate(derived_cols):
-        columns[i % 3].metric(label=rename_dict[col_name], value=f"{df[col_name].values[0]:.2f}")
+        if col_name in ['Ab','Ag']:
+            format_str = "{:d}"
+        else:
+            format_str = "{:.2f}"
+        columns[i % 3].metric(label=rename_dict[col_name], value=format_str.format(df[col_name].values[0]))
 
     X_input = df_display.values
     st.markdown("---")
